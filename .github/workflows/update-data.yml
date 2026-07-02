@@ -1,0 +1,35 @@
+name: 엑셀 업로드 시 데이터 재생성
+
+on:
+  push:
+    paths:
+      - 'upload/*.xlsx'
+      - 'tools/build_values.py'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: 패키지 설치
+        run: pip install pandas openpyxl
+
+      - name: values.json 재생성
+        run: python tools/build_values.py
+
+      - name: 변경사항 커밋
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add data/values.json
+          git diff --cached --quiet || git commit -m "data: 엑셀 업로드에 따른 values.json 재생성"
+          git push
