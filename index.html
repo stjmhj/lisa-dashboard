@@ -1,0 +1,541 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>복지지출 잔차 LISA 3D 지도</title>
+<link href="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.css" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<style>
+:root {
+  --bg: #EDF1F7;
+  --panel: rgba(255,255,255,0.92);
+  --border: rgba(20,30,60,0.08);
+  --text: #17203A;
+  --text2: rgba(20,30,60,0.55);
+  --text3: rgba(20,30,60,0.38);
+  --accent: #4A6CF7;
+  --radius: 12px;
+  --font: 'Pretendard', 'Pretendard GOV', -apple-system, 'Malgun Gothic', sans-serif;
+}
+*, *::before, *::after { margin:0; padding:0; box-sizing:border-box; }
+html, body { height:100%; }
+body { font-family:var(--font); background:var(--bg); overflow:hidden; color:var(--text); -webkit-font-smoothing:antialiased; }
+#map { width:100%; height:100vh; background:var(--bg); }
+
+.glass {
+  background:var(--panel); border:1px solid var(--border); border-radius:var(--radius);
+  backdrop-filter:blur(24px); -webkit-backdrop-filter:blur(24px);
+  box-shadow:0 6px 24px rgba(30,45,90,0.08);
+}
+
+/* LEFT PANEL */
+.lp { position:absolute; top:16px; left:16px; z-index:10; width:290px; padding:20px 20px 16px;
+      max-height:calc(100vh - 32px); overflow-y:auto; }
+.lp::-webkit-scrollbar, .rp::-webkit-scrollbar { width:3px; }
+.lp::-webkit-scrollbar-thumb, .rp::-webkit-scrollbar-thumb { background:rgba(80,100,160,0.25); border-radius:2px; }
+.lp-header { margin-bottom:16px; }
+.lp-header h1 { font-size:17px; font-weight:800; letter-spacing:-0.3px; }
+.lp-header .sub { font-size:11px; color:var(--text3); margin-top:4px; font-weight:500; line-height:1.5; }
+
+.seg-toggle { display:flex; gap:2px; padding:2px; background:rgba(80,100,160,0.1); border-radius:8px; margin-bottom:12px; }
+.seg-btn { flex:1; padding:7px 0; font-size:12px; font-weight:700; background:transparent; color:var(--text2);
+           border:none; border-radius:6px; cursor:pointer; font-family:var(--font); transition:all .2s; }
+.seg-btn.on { background:var(--accent); color:#fff; box-shadow:0 2px 8px rgba(74,108,247,0.3); }
+
+.ctrl { margin-bottom:13px; }
+.ctrl-label { font-size:10px; font-weight:700; color:var(--text3); text-transform:uppercase;
+              letter-spacing:.08em; display:block; margin-bottom:6px; }
+select { width:100%; padding:8px 12px; font-size:13px; font-weight:600; background:rgba(80,100,160,0.07);
+         color:var(--text); border:1px solid var(--border); border-radius:8px; appearance:none; cursor:pointer;
+         font-family:var(--font);
+         background-image:url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='rgba(80,100,160,0.7)' stroke-width='1.5' stroke-linecap='round'/%3E%3C/svg%3E");
+         background-repeat:no-repeat; background-position:right 12px center; }
+select:focus { outline:none; border-color:var(--accent); }
+
+.pills { display:flex; gap:4px; flex-wrap:wrap; }
+.pill { padding:5px 11px; font-size:11px; font-weight:600; border:1px solid rgba(80,100,160,0.25);
+        background:transparent; color:var(--text2); border-radius:20px; cursor:pointer; transition:all .2s;
+        font-family:var(--font); white-space:nowrap; }
+.pill:hover { border-color:rgba(80,100,160,0.55); color:var(--text); }
+.pill.on { background:var(--accent); border-color:var(--accent); color:#fff; box-shadow:0 1px 6px rgba(74,108,247,0.25); }
+
+.divider { height:1px; background:var(--border); margin:12px 0; }
+
+/* Legend */
+.legend { margin-top:4px; }
+.leg-title { font-size:10px; font-weight:600; color:var(--text3); margin-bottom:6px; }
+.leg-item { display:flex; align-items:center; gap:7px; font-size:11px; color:var(--text2); padding:2px 0; font-weight:500; }
+.leg-chip { width:11px; height:11px; border-radius:3px; flex:none; }
+.leg-bar { height:6px; border-radius:3px; margin-bottom:4px; }
+.leg-labels { display:flex; justify-content:space-between; font-size:10px; color:var(--text3); font-weight:500; }
+
+/* RIGHT PANEL */
+.rp { position:absolute; top:16px; right:16px; z-index:10; width:300px; padding:18px;
+      max-height:calc(100vh - 32px); overflow-y:auto; }
+.rp-title { font-size:13px; font-weight:800; margin-bottom:8px; }
+.clu-summary { display:flex; flex-direction:column; gap:3px; margin-bottom:6px; }
+.clu-row { display:flex; align-items:center; gap:8px; font-size:11.5px; padding:3px 0; }
+.clu-row .cnt { margin-left:auto; font-weight:800; font-size:13px; }
+.rank-tabs { display:flex; gap:2px; padding:2px; background:rgba(80,100,160,0.1); border-radius:8px; margin:10px 0 8px; }
+.ri { display:flex; align-items:center; gap:8px; padding:5px 4px; border-radius:6px; font-size:11.5px;
+      cursor:pointer; border-bottom:1px solid rgba(80,100,160,0.08); }
+.ri:hover { background:rgba(74,108,247,0.07); }
+.ri .no { width:16px; color:var(--text3); font-weight:700; font-size:10px; flex:none; }
+.ri .nm { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.ri .sd { color:var(--text3); font-size:10px; flex:none; }
+.ri .val { margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; flex:none; }
+.ri .dot { width:7px; height:7px; border-radius:50%; flex:none; }
+
+/* Detail card */
+.detail { display:none; margin-top:12px; padding-top:10px; border-top:1px solid var(--border); }
+.detail .d-nm { font-size:15px; font-weight:800; }
+.detail .d-sd { font-size:11px; color:var(--text3); margin-bottom:8px; }
+.d-row { display:flex; align-items:center; gap:6px; font-size:11px; padding:4px 0;
+         border-bottom:1px solid rgba(80,100,160,0.08); }
+.d-row .d-lb { color:var(--text2); font-weight:600; width:88px; flex:none; }
+.d-row .d-clu { font-size:10px; font-weight:700; padding:2px 7px; border-radius:10px; flex:none; }
+.d-row .d-v { margin-left:auto; font-weight:700; font-variant-numeric:tabular-nums; }
+.d-close { float:right; background:none; border:none; color:var(--text3); cursor:pointer; font-size:14px; }
+
+/* Tooltip */
+.info-tip { display:none; position:absolute; z-index:20; pointer-events:none; padding:10px 13px; min-width:170px; }
+.info-nm { font-size:13px; font-weight:800; }
+.info-clu { font-size:10px; font-weight:700; display:inline-block; padding:2px 8px; border-radius:10px; margin:4px 0; }
+.info-det { font-size:11px; color:var(--text2); line-height:1.6; }
+
+.maplibregl-ctrl-bottom-right { z-index:5; }
+@media (max-width: 900px) {
+  .lp { width:calc(100vw - 32px); max-height:45vh; }
+  .rp { display:none; }
+}
+</style>
+</head>
+<body>
+<div id="map"></div>
+
+<!-- LEFT PANEL -->
+<div class="lp glass">
+  <div class="lp-header">
+    <h1>복지지출 잔차 LISA 지도</h1>
+    <div class="sub">시군구 1인당 결산액 회귀 잔차의<br>국지적 공간자기상관 (Local Moran's I)</div>
+  </div>
+
+  <div class="seg-toggle" id="modeTg">
+    <button class="seg-btn on" data-v="clu">LISA 군집</button>
+    <button class="seg-btn" data-v="resid">잔차값</button>
+  </div>
+
+  <div class="ctrl">
+    <span class="ctrl-label">분석 변수</span>
+    <div class="pills" id="varBtns"></div>
+  </div>
+
+  <div class="ctrl">
+    <span class="ctrl-label">유의성 기준</span>
+    <div class="pills" id="sigBtns">
+      <button class="pill on" data-v="p05">p &lt; 0.05</button>
+      <button class="pill" data-v="fdr">FDR 보정 유의만</button>
+    </div>
+  </div>
+
+  <div class="ctrl">
+    <span class="ctrl-label">지역</span>
+    <select id="regionSel"><option value="all">전국</option></select>
+  </div>
+
+  <div class="seg-toggle" id="dimTg">
+    <button class="seg-btn on" data-v="3d">3D 막대</button>
+    <button class="seg-btn" data-v="2d">2D</button>
+  </div>
+
+  <div class="divider"></div>
+  <div class="legend" id="legend"></div>
+</div>
+
+<!-- RIGHT PANEL -->
+<div class="rp glass">
+  <div class="rp-title" id="cluTitle">군집 현황</div>
+  <div class="clu-summary" id="cluSummary"></div>
+  <div class="rank-tabs" id="rankTg">
+    <button class="seg-btn on" data-v="top">잔차 상위 10</button>
+    <button class="seg-btn" data-v="bottom">잔차 하위 10</button>
+  </div>
+  <div id="rankList"></div>
+  <div class="detail" id="detail">
+    <button class="d-close" id="detailClose">✕</button>
+    <div class="d-nm" id="dNm"></div>
+    <div class="d-sd" id="dSd"></div>
+    <div id="dRows"></div>
+  </div>
+</div>
+
+<!-- Tooltip -->
+<div class="info-tip glass" id="info">
+  <div class="info-nm" id="infoNm"></div>
+  <div><span class="info-clu" id="infoClu"></span></div>
+  <div class="info-det" id="infoDet"></div>
+</div>
+
+<script>
+'use strict';
+
+// ── 상수 ─────────────────────────────────────────────
+const CLU_COLOR = {
+  'HH(양+ 군집)': '#E4553F',
+  'LL(음- 군집)': '#3E7BD6',
+  'HL(고립 과다)': '#F0A05A',
+  'LH(고립 과소)': '#7FC7E8',
+  '비유의': '#C9D2E0'
+};
+const CLU_ORDER = ['HH(양+ 군집)', 'LL(음- 군집)', 'HL(고립 과다)', 'LH(고립 과소)', '비유의'];
+const CLU_DESC = {
+  'HH(양+ 군집)': '고지출-고지출 이웃 (과다지출 군집)',
+  'LL(음- 군집)': '저지출-저지출 이웃 (과소지출 군집)',
+  'HL(고립 과다)': '고지출, 이웃은 저지출',
+  'LH(고립 과소)': '저지출, 이웃은 고지출',
+  '비유의': '통계적으로 유의하지 않음'
+};
+const STYLE_URL = 'https://basemaps.cartocdn.com/gl/positron-nolabels-gl-style/style.json';
+const COLORS = {
+  missing: '#E4E8F1', neutral: '#C9D2E4',
+  sidoLine: 'rgba(60,90,180,0.4)', sggLine: 'rgba(60,90,180,0.18)',
+  labelColor: 'rgba(20,28,45,0.85)', labelHalo: 'rgba(255,255,255,0.92)',
+  sidoLabelColor: 'rgba(20,28,45,0.6)', sidoLabelHalo: 'rgba(255,255,255,0.92)'
+};
+const CAM = {
+  'all': {center:[127.7,36.0], zoom:6.4, pitch:45, bearing:-10},
+  '서울특별시': {center:[126.97,37.56], zoom:10.2, pitch:50, bearing:-15},
+  '부산광역시': {center:[129.03,35.14], zoom:9.8, pitch:50, bearing:-15},
+  '대구광역시': {center:[128.56,35.81], zoom:9.6, pitch:50, bearing:-15},
+  '인천광역시': {center:[126.50,37.46], zoom:8.8, pitch:50, bearing:-15},
+  '광주광역시': {center:[126.83,35.15], zoom:10.5, pitch:50, bearing:-15},
+  '대전광역시': {center:[127.40,36.34], zoom:10.5, pitch:50, bearing:-15},
+  '울산광역시': {center:[129.22,35.53], zoom:9.8, pitch:50, bearing:-15},
+  '세종특별자치시': {center:[127.00,36.52], zoom:10.2, pitch:50, bearing:-15},
+  '경기도': {center:[127.11,37.45], zoom:8.3, pitch:50, bearing:-15},
+  '강원특별자치도': {center:[128.23,37.72], zoom:7.8, pitch:50, bearing:-15},
+  '충청북도': {center:[127.96,36.64], zoom:8.5, pitch:50, bearing:-15},
+  '충청남도': {center:[126.72,36.53], zoom:8.3, pitch:50, bearing:-15},
+  '전북특별자치도': {center:[127.00,35.73], zoom:8.5, pitch:50, bearing:-15},
+  '전라남도': {center:[126.80,34.73], zoom:7.8, pitch:50, bearing:-15},
+  '경상북도': {center:[129.00,36.30], zoom:7.6, pitch:50, bearing:-15},
+  '경상남도': {center:[128.40,35.28], zoom:8.3, pitch:50, bearing:-15},
+  '제주특별자치도': {center:[126.56,33.38], zoom:9.3, pitch:50, bearing:-15}
+};
+const MAX_H = 120000;       // 최대 막대 높이 (m)
+const BAR_SEGMENTS = 28;    // 원기둥 둘레 분할 수
+
+// ── 상태 ─────────────────────────────────────────────
+let BOUND = null, VALUES = null, BARS = null;
+let mode = 'clu', varKey = null, sig = 'p05', region = 'all', is3D = true;
+
+const $ = id => document.getElementById(id);
+function fmt(v) {
+  if (v === null || v === undefined || isNaN(v)) return 'N/A';
+  const a = Math.abs(v);
+  if (a >= 10000) return (v/10000).toLocaleString(undefined,{maximumFractionDigits:1}) + '만원';
+  return Math.round(v).toLocaleString() + '원';
+}
+
+// ── 지도 ─────────────────────────────────────────────
+const map = new maplibregl.Map({
+  container: 'map',
+  style: STYLE_URL,
+  center: CAM.all.center, zoom: CAM.all.zoom, pitch: CAM.all.pitch, bearing: CAM.all.bearing,
+  antialias: true, attributionControl: {compact:true}
+});
+map.addControl(new maplibregl.NavigationControl({visualizePitch:true}), 'bottom-right');
+
+// 폴리곤에서 가장 큰 링(외곽)과 bbox 계산
+function largestRing(geom) {
+  const polys = geom.type === 'Polygon' ? [geom.coordinates] : geom.coordinates;
+  let best = null, bestSpan = -1;
+  for (const rings of polys) {
+    const ring = rings[0];
+    let minX=1e9,maxX=-1e9,minY=1e9,maxY=-1e9;
+    for (const [x,y] of ring) {
+      if (x<minX)minX=x; if (x>maxX)maxX=x; if (y<minY)minY=y; if (y>maxY)maxY=y;
+    }
+    const span = (maxX-minX)*(maxY-minY);
+    if (span > bestSpan) { bestSpan = span; best = {ring, minX, maxX, minY, maxY}; }
+  }
+  return best;
+}
+
+// 지역별 원형 막대(원기둥 바닥 원) 생성 — 반지름은 지역 크기에 맞춰 조정
+function buildBars() {
+  const feats = [];
+  for (const f of BOUND.sgg.features) {
+    const r = largestRing(f.geometry);
+    if (!r) continue;
+    const cx = (r.minX + r.maxX) / 2, cy = (r.minY + r.maxY) / 2;
+    const mPerLat = 111320, mPerLon = 111320 * Math.cos(cy * Math.PI/180);
+    const spanM = Math.min((r.maxX - r.minX) * mPerLon, (r.maxY - r.minY) * mPerLat);
+    const radius = Math.max(1200, Math.min(3200, spanM * 0.22));
+    const ring = [];
+    for (let i = 0; i <= BAR_SEGMENTS; i++) {
+      const a = i / BAR_SEGMENTS * Math.PI * 2;
+      ring.push([cx + Math.cos(a) * radius / mPerLon, cy + Math.sin(a) * radius / mPerLat]);
+    }
+    feats.push({
+      type:'Feature',
+      properties: {...f.properties, cx, cy},
+      geometry: {type:'Polygon', coordinates:[ring]}
+    });
+  }
+  return {type:'FeatureCollection', features:feats};
+}
+
+// 현재 변수/설정 기준으로 feature 속성 재계산 (폴리곤 + 막대 공통)
+function decorate() {
+  if (!BOUND || !VALUES || !varKey) return;
+  let maxAbs = 1;
+  for (const f of BOUND.sgg.features) {
+    const r = VALUES.regions[f.properties.code];
+    const v = r && r.v[varKey];
+    if (v && v.resid !== null) maxAbs = Math.max(maxAbs, Math.abs(v.resid));
+  }
+  const apply = f => {
+    const p = f.properties;
+    const r = VALUES.regions[p.code];
+    const v = r && r.v[varKey];
+    if (!v || v.resid === null) {
+      p.resid = null; p.clu = null; p.p = null; p.fdr = false; p.h = 0; p.eclu = '비유의';
+    } else {
+      p.resid = v.resid; p.clu = v.clu; p.p = v.p; p.fdr = v.fdr;
+      p.h = is3D ? Math.abs(v.resid)/maxAbs*MAX_H : 0;
+      p.eclu = (sig === 'fdr' && !v.fdr) ? '비유의' : v.clu; // 유효 군집 (필터 적용)
+    }
+  };
+  BOUND.sgg.features.forEach(apply);
+  if (BARS) BARS.features.forEach(apply);
+  BOUND.sgg._maxAbs = maxAbs;
+}
+
+function colorExpr() {
+  if (mode === 'clu') {
+    const m = ['match', ['get','eclu']];
+    for (const k of CLU_ORDER) m.push(k, CLU_COLOR[k]);
+    m.push(COLORS.missing);
+    return m;
+  }
+  const mx = BOUND.sgg._maxAbs;
+  return ['case',
+    ['==', ['typeof', ['get','resid']], 'number'],
+    ['interpolate', ['linear'], ['get','resid'],
+      -mx, '#3E7BD6', -mx*0.3, '#8FAEDB', 0, COLORS.neutral, mx*0.3, '#DBA08F', mx, '#E4553F'],
+    COLORS.missing];
+}
+
+function installLayers() {
+  if (!map.getSource('sgg')) map.addSource('sgg', {type:'geojson', data:BOUND.sgg});
+  if (!map.getSource('bars')) map.addSource('bars', {type:'geojson', data:BARS});
+  if (!map.getSource('sido')) map.addSource('sido', {type:'geojson', data:BOUND.sido});
+  if (!map.getSource('sgg-labels')) map.addSource('sgg-labels', {type:'geojson', data:BOUND.sggLabels});
+  if (!map.getSource('sido-labels')) map.addSource('sido-labels', {type:'geojson', data:BOUND.sidoLabels});
+
+  // 바닥: 연한 채우기 (구역 색), 경계선
+  map.addLayer({ id:'sgg-fill', type:'fill', source:'sgg',
+    paint:{ 'fill-color':colorExpr(), 'fill-opacity':0.38 }});
+  map.addLayer({ id:'sgg-line', type:'line', source:'sgg', paint:{'line-color':COLORS.sggLine,'line-width':0.5} });
+  map.addLayer({ id:'sido-line', type:'line', source:'sido', paint:{'line-color':COLORS.sidoLine,'line-width':1.2} });
+
+  // 원형 막대: |잔차| 만큼 압출된 원기둥
+  map.addLayer({ id:'bars', type:'fill-extrusion', source:'bars',
+    paint:{ 'fill-extrusion-height':['get','h'], 'fill-extrusion-color':colorExpr(),
+            'fill-extrusion-opacity':0.92 }});
+
+  map.addLayer({ id:'sgg-label', type:'symbol', source:'sgg-labels', minzoom:7.2,
+    layout:{'text-field':['get','name'],'text-size':11,'text-font':['Noto Sans Regular']},
+    paint:{'text-color':COLORS.labelColor,'text-halo-color':COLORS.labelHalo,'text-halo-width':1.5} });
+  map.addLayer({ id:'sido-label', type:'symbol', source:'sido-labels', maxzoom:7.2,
+    layout:{'text-field':['get','name'],'text-size':13,'text-font':['Noto Sans Regular']},
+    paint:{'text-color':COLORS.sidoLabelColor,'text-halo-color':COLORS.sidoLabelHalo,'text-halo-width':2} });
+  applyRegionFilter();
+}
+
+function refreshMap() {
+  decorate();
+  const src = map.getSource('sgg');
+  if (src) {
+    src.setData(BOUND.sgg);
+    map.getSource('bars').setData(BARS);
+    map.setPaintProperty('sgg-fill', 'fill-color', colorExpr());
+    map.setPaintProperty('bars', 'fill-extrusion-color', colorExpr());
+  }
+  renderLegend(); renderSummary(); renderRank();
+}
+
+function applyRegionFilter() {
+  const f = region === 'all' ? null : ['==', ['get','sido'], region];
+  for (const l of ['sgg-fill','sgg-line','bars','sgg-label'])
+    if (map.getLayer(l)) map.setFilter(l, f);
+}
+
+// ── UI 렌더 ───────────────────────────────────────────
+function renderVarBtns() {
+  $('varBtns').innerHTML = VALUES.variables.map(v =>
+    `<button class="pill${v.key===varKey?' on':''}" data-v="${v.key}">${v.label}</button>`).join('');
+}
+function varLabel(){ const v = VALUES.variables.find(v=>v.key===varKey); return v ? v.label : varKey; }
+
+function renderLegend() {
+  const el = $('legend');
+  if (mode === 'clu') {
+    el.innerHTML = '<div class="leg-title">LISA 군집 · ' + varLabel() +
+      (sig==='fdr' ? ' (FDR 보정)' : '') + '</div>' +
+      CLU_ORDER.map(k => `<div class="leg-item"><span class="leg-chip" style="background:${CLU_COLOR[k]}"></span>${k}<span style="color:var(--text3);font-size:10px;margin-left:2px">${CLU_DESC[k]}</span></div>`).join('') +
+      '<div style="font-size:10px;color:var(--text3);margin-top:5px">막대 높이 = |잔차| 크기</div>';
+  } else {
+    const mx = BOUND.sgg._maxAbs;
+    el.innerHTML = `<div class="leg-title">잔차 (1인당, 원) · ${varLabel()}</div>
+      <div class="leg-bar" style="background:linear-gradient(to right,#3E7BD6,${COLORS.neutral},#E4553F)"></div>
+      <div class="leg-labels"><span>${fmt(-mx)}</span><span>0</span><span>+${fmt(mx)}</span></div>
+      <div style="font-size:10px;color:var(--text3);margin-top:4px;line-height:1.5">양(+): 모형 예측보다 과다지출 · 음(−): 과소지출<br>막대 높이 = |잔차| 크기</div>`;
+  }
+}
+
+function inRegion(code) {
+  if (region === 'all') return true;
+  const r = VALUES.regions[code];
+  return r && r.sido === region;
+}
+
+function renderSummary() {
+  const counts = {}; CLU_ORDER.forEach(k => counts[k]=0);
+  let total = 0;
+  for (const f of BOUND.sgg.features) {
+    if (!inRegion(f.properties.code)) continue;
+    counts[f.properties.eclu] = (counts[f.properties.eclu]||0) + 1; total++;
+  }
+  $('cluTitle').textContent = `군집 현황 · ${varLabel()} (${region==='all'?'전국':region} ${total})`;
+  $('cluSummary').innerHTML = CLU_ORDER.map(k =>
+    `<div class="clu-row"><span class="leg-chip" style="background:${CLU_COLOR[k]}"></span>${k}<span class="cnt">${counts[k]}</span></div>`).join('');
+}
+
+let rankMode = 'top';
+function renderRank() {
+  const rows = [];
+  for (const [code, r] of Object.entries(VALUES.regions)) {
+    if (region !== 'all' && r.sido !== region) continue;
+    const v = r.v[varKey];
+    if (v && v.resid !== null) rows.push({code, name:r.name, sido:r.sido, resid:v.resid, clu:v.clu});
+  }
+  rows.sort((a,b) => rankMode==='top' ? b.resid-a.resid : a.resid-b.resid);
+  $('rankList').innerHTML = rows.slice(0,10).map((r,i) =>
+    `<div class="ri" data-code="${r.code}">
+      <span class="no">${i+1}</span>
+      <span class="dot" style="background:${CLU_COLOR[r.clu]||CLU_COLOR['비유의']}"></span>
+      <span class="nm">${r.name}</span><span class="sd">${r.sido.slice(0,2)}</span>
+      <span class="val">${rankMode==='top'?'+':''}${fmt(r.resid)}</span>
+    </div>`).join('');
+}
+
+function showDetail(code) {
+  const r = VALUES.regions[code];
+  if (!r) return;
+  $('detail').style.display = 'block';
+  $('dNm').textContent = r.name;
+  $('dSd').textContent = r.sido;
+  $('dRows').innerHTML = VALUES.variables.map(vd => {
+    const v = r.v[vd.key];
+    if (!v) return '';
+    const c = CLU_COLOR[v.clu] || CLU_COLOR['비유의'];
+    const sign = v.resid > 0 ? '+' : '';
+    return `<div class="d-row">
+      <span class="d-lb">${vd.label}</span>
+      <span class="d-clu" style="background:${c}22;color:${v.clu==='비유의'?'var(--text3)':c};border:1px solid ${c}66">${v.clu.split('(')[0]}${v.fdr?' ★':''}</span>
+      <span class="d-v">${v.resid===null?'N/A':sign+fmt(v.resid)}</span>
+    </div>`;
+  }).join('') + `<div style="font-size:10px;color:var(--text3);margin-top:6px">★ = FDR 보정 후에도 유의</div>`;
+}
+
+function flyToRegion(code) {
+  const f = BARS.features.find(f => f.properties.code === code);
+  if (f) map.flyTo({center:[f.properties.cx, f.properties.cy], zoom:9.2, pitch:is3D?50:0, duration:1200});
+}
+
+// ── 이벤트 ───────────────────────────────────────────
+function bindToggle(id, fn) {
+  $(id).addEventListener('click', e => {
+    const b = e.target.closest('button'); if (!b) return;
+    $(id).querySelectorAll('button').forEach(x => x.classList.toggle('on', x===b));
+    fn(b.dataset.v);
+  });
+}
+bindToggle('modeTg', v => { mode = v; refreshMap(); });
+bindToggle('sigBtns', v => { sig = v; refreshMap(); });
+bindToggle('rankTg', v => { rankMode = v; renderRank(); });
+bindToggle('dimTg', v => {
+  is3D = v === '3d';
+  map.easeTo({pitch: is3D ? (CAM[region]||CAM.all).pitch : 0, duration:600});
+  refreshMap();
+});
+$('varBtns').addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return;
+  varKey = b.dataset.v; renderVarBtns(); refreshMap();
+});
+$('regionSel').addEventListener('change', e => {
+  region = e.target.value;
+  applyRegionFilter();
+  const c = CAM[region] || CAM.all;
+  map.flyTo({...c, pitch: is3D ? c.pitch : 0, duration:1400});
+  renderSummary(); renderRank();
+});
+$('rankList').addEventListener('click', e => {
+  const ri = e.target.closest('.ri'); if (!ri) return;
+  showDetail(ri.dataset.code); flyToRegion(ri.dataset.code);
+});
+$('detailClose').addEventListener('click', () => $('detail').style.display='none');
+
+// 지도 hover / click (막대 + 바닥 폴리곤 공통)
+function onHover(e) {
+  if (!e.features.length) return;
+  const p = e.features[0].properties;
+  map.getCanvas().style.cursor = 'pointer';
+  $('infoNm').textContent = p.name;
+  const clu = p.eclu || '비유의';
+  const c = CLU_COLOR[clu] || CLU_COLOR['비유의'];
+  const cluEl = $('infoClu');
+  cluEl.textContent = clu; cluEl.style.background = c+'26';
+  cluEl.style.color = clu==='비유의' ? 'var(--text3)' : c;
+  cluEl.style.border = `1px solid ${c}66`;
+  const resid = (p.resid===undefined||p.resid===null||p.resid==='') ? null : Number(p.resid);
+  $('infoDet').innerHTML = `${p.sido} · ${varLabel()}<br>잔차 <b>${resid===null?'N/A':(resid>0?'+':'')+fmt(resid)}</b>` +
+    (p.p!==null && p.p!==undefined && p.p!=='' ? ` · p=${Number(p.p).toFixed(3)}` : '') +
+    ((p.fdr===true||p.fdr==='true') ? ' · FDR유의 ★' : '');
+  const tip = $('info');
+  tip.style.display = 'block';
+  tip.style.left = Math.min(e.point.x + 14, window.innerWidth - 220) + 'px';
+  tip.style.top = (e.point.y + 14) + 'px';
+}
+function onLeave() { map.getCanvas().style.cursor = ''; $('info').style.display = 'none'; }
+for (const layer of ['bars','sgg-fill']) {
+  map.on('mousemove', layer, onHover);
+  map.on('mouseleave', layer, onLeave);
+  map.on('click', layer, e => { if (e.features.length) showDetail(e.features[0].properties.code); });
+}
+
+// ── 초기화 ───────────────────────────────────────────
+Promise.all([
+  fetch('data/boundaries.json').then(r => { if(!r.ok) throw new Error('boundaries.json '+r.status); return r.json(); }),
+  fetch('data/values.json').then(r => { if(!r.ok) throw new Error('values.json '+r.status); return r.json(); })
+]).then(([b, v]) => {
+  BOUND = b; VALUES = v;
+  varKey = v.variables[0].key;
+  BARS = buildBars();
+  const sidos = [...new Set(Object.values(v.regions).map(r=>r.sido))].sort();
+  $('regionSel').innerHTML = '<option value="all">전국</option>' +
+    sidos.map(s=>`<option value="${s}">${s}</option>`).join('');
+  renderVarBtns();
+  decorate();
+  const start = () => { installLayers(); renderLegend(); renderSummary(); renderRank(); };
+  if (map.isStyleLoaded()) start(); else map.once('load', start);
+}).catch(err => {
+  document.body.insertAdjacentHTML('beforeend',
+    `<div style="position:fixed;inset:auto 20px 20px 20px;padding:14px;border-radius:10px;background:#fdecea;color:#b3261e;font-size:13px;z-index:99">데이터 로드 실패: ${err.message}<br>로컬에서 보려면 웹서버로 실행하세요 (예: python -m http.server)</div>`);
+});
+</script>
+</body>
+</html>
