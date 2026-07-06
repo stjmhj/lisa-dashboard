@@ -33,17 +33,17 @@ def find_excel():
 
 
 def label_of(base):
-    """열 이름에서 표시용 라벨 생성: 인당_B_사회복지 → 사회복지"""
+    """열 이름에서 표시용 라벨 생성: 인당_B_사회복지 → 1인당 사회복지, B_보건 → 보건"""
     lb = base
-    for pre in ('인당_',):
-        if lb.startswith(pre):
-            lb = lb[len(pre):]
+    pc = lb.startswith('인당_')          # 1인당(per-capita) 여부 구분
+    if pc:
+        lb = lb[len('인당_'):]
     for pre in ('B_', '부문_'):
         if lb.startswith(pre):
             lb = lb[len(pre):]
     if lb.endswith('_B'):
         lb = lb[:-2]
-    return lb
+    return ('1인당 ' + lb) if pc else lb
 
 
 def to_bool(v):
