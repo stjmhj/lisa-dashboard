@@ -19,7 +19,7 @@ import geopandas as gpd
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 GPKG = sys.argv[1] if len(sys.argv) > 1 else \
-    r'C:\Users\kkhee\Documents\spatial_project\output\sgg_weight_output\잔차LISA_전체.gpkg'
+    r'C:\Users\KH\Documents\spatial_project\output\sgg_weight_output\잔차LISA_전체.gpkg'
 
 SGG_SIMPLIFY_M = 150   # 시군구 경계 단순화 허용오차 (m, EPSG:5186)
 SIDO_SIMPLIFY_M = 200
